@@ -1,5 +1,11 @@
 #include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 #include "winsock2.h" 
+#include <ws2tcpip.h>
+#include <math.h>
+
+#pragma comment(lib, "Ws2_32.lib")
 
 #define R_C_BUFF 64
 #define READ_BUFF 49
@@ -13,8 +19,8 @@ int main(int argc, char** argv) {
 	Init_Winsock();
 
 	char s_c_buff_1[R_C_BUFF], s_c_buff_2[R_C_BUFF], file_read_buff[READ_BUFF];
-	unsigned int chnl_port = -1, totalsent = -1, num_sent = -1, num_read = -1, notwritten = -1, not_been_read = -1;
-	int s_c_fd = -1, input_file_size = 0;
+	int chnl_port = -1, totalsent = -1, num_sent = -1, num_read = -1, notwritten = -1,
+		not_been_read = -1, input_file_size = 0, s_c_fd = -1;
 	FILE *fp;
 
 	if (argc != 4) {
@@ -60,7 +66,7 @@ int main(int argc, char** argv) {
 		// keep looping until nothing left to write for this BUFF size block
 		while (notwritten > 0) {
 			// notwritten = how much left to write ; totalsent = how much written so far ; num_sent = how much written in last write() call
-			num_sent = sendto(s_c_fd, s_c_buff_1 + totalsent, notwritten, 0, &cnl_addr, sizeof(cnl_addr));
+			num_sent = sendto(s_c_fd, s_c_buff_1 + totalsent, notwritten, 0, (SOCKADDR*) &cnl_addr, sizeof(cnl_addr));
 			if (num_sent == -1) {// check if error occured (server closed connection?)
 				fprintf(stderr, "%s\n", strerror(errno));
 				exit(1);
@@ -111,11 +117,14 @@ void compute_block(char read_buff[READ_BUFF], char s_c_buff_1[R_C_BUFF]) {
 
 	for (block_ind = 0; block_ind < 8; block_ind++) {
 		for (bit_ind = 0; bit_ind < READ_BUFF; bit_ind++) {
+
+			if (bit_ind % 7 == 0 && bit_ind != 0) { printf("\n"); }
+
 			read_ind = (bit_ind / 8) + (block_ind * 8);
 			write_ind = (bit_ind / 7) + (block_ind * 8);
 			bit_pos = bit_ind % 7;
 
-			curr_bit = (read_buff[read_ind] & (pow(2, bit_pos))) != 0; // 1 if result after mask is different from 0. otherwise - 0.
+			curr_bit = (read_buff[read_ind] & ((int) pow(2, bit_pos))) != 0; // 1 if result after mask is different from 0. otherwise - 0.
 			s_c_buff_1[write_ind] = (curr_bit << (7 - bit_pos)) | s_c_buff_1[write_ind];
 			xor ^= curr_bit;
 
@@ -125,7 +134,7 @@ void compute_block(char read_buff[READ_BUFF], char s_c_buff_1[R_C_BUFF]) {
 				xor = 0;
 			}
 
-			printf("%d", curr_bit);
+			printf("%d", curr_bit);		
 		}
 		printf("\n");
 
@@ -136,9 +145,15 @@ void compute_block(char read_buff[READ_BUFF], char s_c_buff_1[R_C_BUFF]) {
 	}
 
 
-	printf("\n New block: \n");
-	for (i = 0; i < 8; i++) {
-		printf("%0X \n", s_c_buff_1[i]);
+	printf("\nNew block: \n");
+	for (i = 0; i < 8*64; i++) {
+		if (i % 7 == 0) {
+			printf("block no # %d", i / 7)
+		}
+		for (j = 0; j < 8; j++) {
+			printf("%d", !!((s_c_buff_1[i] << j) & 0x80));
+		}
+		printf("\n");
 	}
 
 	return;
