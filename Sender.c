@@ -7,18 +7,24 @@
 
 #pragma comment(lib, "Ws2_32.lib")
 
-#define R_C_BUFF 64
+#define RECEIVE_BUFF 4
+#define S_C_BUFF 64
 #define READ_BUFF 49
 #define BYTE_SIZE 8
 
 void Init_Winsock();
-void compute_block(char read_buff[READ_BUFF], char s_c_buff_1[R_C_BUFF]);
+void compute_block(char read_buff[READ_BUFF], char s_c_buff_1[S_C_BUFF]);
+
+
+int END_FLAG = 0;
+
 
 int main(int argc, char** argv) {
 
 	Init_Winsock();
 
-	char s_c_buff_1[R_C_BUFF], s_c_buff_2[R_C_BUFF], file_read_buff[READ_BUFF];
+	char s_c_buff_1[S_C_BUFF], file_read_buff[READ_BUFF];
+	int recv_buff[RECEIVE_BUFF];
 	int chnl_port = -1, totalsent = -1, num_sent = -1, num_read = -1, notwritten = -1,
 		not_been_read = -1, input_file_size = 0, s_c_fd = -1;
 	FILE *fp;
@@ -49,6 +55,7 @@ int main(int argc, char** argv) {
 	cnl_addr.sin_addr.s_addr = inet_addr(ip);
 
 
+	HANDLE thread = CreateThread(NULL, 0, thread_end_listen, &s_c_fd, 0, NULL);
 
 	not_been_read = input_file_size;
 	while (not_been_read > 0) {
@@ -108,17 +115,18 @@ int get_file_size(FILE *fp) {
 	return size;
 }
 
-void compute_block(char read_buff[READ_BUFF], char s_c_buff_1[R_C_BUFF]) {
+void compute_block(char read_buff[READ_BUFF], char s_c_buff_1[S_C_BUFF]) {
 
 	int bit_ind, read_ind, write_ind, block_ind, xor = 0, bit_pos, i, j;
 	char curr_bit;
 
-	memset(s_c_buff_1, 0, R_C_BUFF);
+	memset(s_c_buff_1, 0, S_C_BUFF);
 
 	for (block_ind = 0; block_ind < 8; block_ind++) {
+		printf("old block no # %d \n", block_ind); //print - delete after!!!!!!!!!!!!
 		for (bit_ind = 0; bit_ind < READ_BUFF; bit_ind++) {
 
-			if (bit_ind % 7 == 0 && bit_ind != 0) { printf("\n"); }
+			if (bit_ind % 7 == 0 && bit_ind != 0) { printf("\n"); }//print - delete after!!!!!!!!!!!!
 
 			if ((bit_ind % 7) == 0 && bit_ind != 0) {
 				//store parity
@@ -132,32 +140,67 @@ void compute_block(char read_buff[READ_BUFF], char s_c_buff_1[R_C_BUFF]) {
 
 			curr_bit = (read_buff[read_ind] & ((int) pow(2, bit_pos))) != 0; // 1 if result after mask is different from 0. otherwise - 0.
 			s_c_buff_1[write_ind] = (curr_bit <<  bit_pos) | s_c_buff_1[write_ind];
-			xor = xor ^ curr_bit;
+			xor^= curr_bit;
 
-
-
-			printf("%d", curr_bit);		
+			printf("%d", curr_bit);		//print - delete after!!!!!!!!!!!!
 		}
-		printf("\n");
+		printf("\n");//print - delete after!!!!!!!!!!!!
 
 		for (i = 0; i < 7; i++) {
 			s_c_buff_1[7+(block_ind * 8)] ^= s_c_buff_1[i];
 		}
-		printf("\n------------\n");
+		printf("\n------------\n");//print - delete after!!!!!!!!!!!!
 	}
 
-
-	printf("\nNew blocks: \n");
-	for (i = 0; i < 64; i++) {
-		if (i % 8 == 0 && i != 63) {
-			printf("block no # %d \n", i / 8);
+	printf("\nNew blocks: \n");//print - delete after!!!!!!!!!!!!
+	for (i = 0; i < 64; i++) {//print - delete after!!!!!!!!!!!!
+		if (i % 8 == 0 && i != 63) {//print - delete after!!!!!!!!!!!!
+			printf("new block no # %d \n", i / 8);//print - delete after!!!!!!!!!!!!
 		}
 
-		for (j = 0; j < 8; j++) {
-			printf("%d", !!((s_c_buff_1[i] << j) & 0x80));
-		}
-		printf("\n");
+		for (j = 0; j < 8; j++) {//print - delete after!!!!!!!!!!!!
+			printf("%d", !!((s_c_buff_1[i] << j) & 0x80));//print - delete after!!!!!!!!!!!!
+		}//print - delete after!!!!!!!!!!!!
+		printf("\n");//print - delete after!!!!!!!!!!!!
 	}
 
 	return;
+}
+
+
+
+DWORD WINAPI thread_end_listen(void *param) {
+
+	int status, bytes_read, notread, totalread, num_sent;
+	int s_c_buff_1 = *((int*)param);
+
+	while (END_FLAG == 0) {
+		notread = RECEIVE_BUFF;
+		bytes_read = 0;
+		while (notread > 0) {
+			bytes_read = recvfrom(s_c_fd, recv_buff + bytes_read, RECEIVE_BUFF, 0, 0, 0); //deliver fd and buff as parameter or as global vars
+			if (bytes_read == -1) {
+				fprintf(stderr, "%s\n", strerror(errno));
+				_endthread(1);
+			}
+			totalread += bytes_read;
+			notread -= num_sent;
+		}
+		END_FLAG = 1;
+		_endthread(0);
+	}
+
+
+	while (1) {
+		memset(str, '\0', STR_LEN);
+		if (scanf("%s", str) > 0 && strcmp(str, "END") == 0) {
+			status = shutdown(connfd, SD_RECEIVE);
+			if (status) {
+				printf("Error while closing socket. \n");
+				_endthread(1);
+			}
+			END_FLAG = 1;
+			_endthread(0);
+		}
+	}
 }
