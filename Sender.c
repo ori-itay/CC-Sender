@@ -120,19 +120,21 @@ void compute_block(char read_buff[READ_BUFF], char s_c_buff_1[R_C_BUFF]) {
 
 			if (bit_ind % 7 == 0 && bit_ind != 0) { printf("\n"); }
 
-			read_ind = (bit_ind / 8) + (block_ind * 8);
-			write_ind = (bit_ind / 7) + (block_ind * 8);
-			bit_pos = bit_ind % 7;
-
-			curr_bit = (read_buff[read_ind] & ((int) pow(2, bit_pos))) != 0; // 1 if result after mask is different from 0. otherwise - 0.
-			s_c_buff_1[write_ind] = (curr_bit << (7 - bit_pos)) | s_c_buff_1[write_ind];
-			xor ^= curr_bit;
-
-			if (bit_ind % 7 == 0) {
+			if ((bit_ind % 7) == 0 && bit_ind != 0) {
 				//store parity
 				s_c_buff_1[write_ind] = xor | s_c_buff_1[write_ind];
 				xor = 0;
 			}
+
+			read_ind = (bit_ind / 8) + (block_ind * 8);
+			write_ind = (bit_ind / 7) + (block_ind * 8);
+			bit_pos = 7 - bit_ind % 7;
+
+			curr_bit = (read_buff[read_ind] & ((int) pow(2, bit_pos))) != 0; // 1 if result after mask is different from 0. otherwise - 0.
+			s_c_buff_1[write_ind] = (curr_bit <<  bit_pos) | s_c_buff_1[write_ind];
+			xor = xor ^ curr_bit;
+
+
 
 			printf("%d", curr_bit);		
 		}
@@ -145,11 +147,12 @@ void compute_block(char read_buff[READ_BUFF], char s_c_buff_1[R_C_BUFF]) {
 	}
 
 
-	printf("\nNew block: \n");
-	for (i = 0; i < 8*64; i++) {
-		if (i % 7 == 0) {
-			printf("block no # %d", i / 7)
+	printf("\nNew blocks: \n");
+	for (i = 0; i < 64; i++) {
+		if (i % 8 == 0 && i != 63) {
+			printf("block no # %d \n", i / 8);
 		}
+
 		for (j = 0; j < 8; j++) {
 			printf("%d", !!((s_c_buff_1[i] << j) & 0x80));
 		}
