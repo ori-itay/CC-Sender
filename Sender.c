@@ -18,6 +18,10 @@ void compute_block(char read_buff[READ_BUFF], char s_c_buff_1[S_C_BUFF]);
 
 int END_FLAG = 0;
 
+struct ARGS {
+	int socket_fd;
+	int buff[RECEIVE_BUFF];
+};
 
 int main(int argc, char** argv) {
 
@@ -51,14 +55,14 @@ int main(int argc, char** argv) {
 	struct sockaddr_in cnl_addr;
 	memset(&cnl_addr, 0, sizeof(cnl_addr));
 	cnl_addr.sin_family = AF_INET;
-	cnl_addr.sin_port = htons(chnl_port); 
+	cnl_addr.sin_port = htons(chnl_port);
 	cnl_addr.sin_addr.s_addr = inet_addr(ip);
 
-
-	HANDLE thread = CreateThread(NULL, 0, thread_end_listen, &s_c_fd, 0, NULL);
+	struct ARGS thread_args = { s_c_fd , recv_buff };
+	HANDLE thread = CreateThread(NULL, 0, thread_end_listen, &thread_args, 0, NULL);
 
 	not_been_read = input_file_size;
-	while (not_been_read > 0) {
+	while (not_been_read > 0 && END_FLAG == 0) {
 		memset(file_read_buff, 0, READ_BUFF);
 		num_read = read(fp, file_read_buff, READ_BUFF);
 		if (num_read <= 0) {
@@ -71,9 +75,9 @@ int main(int argc, char** argv) {
 		notwritten = num_read; //curr num of bytes to write
 		totalsent = 0;
 		// keep looping until nothing left to write for this BUFF size block
-		while (notwritten > 0) {
+		while (notwritten > 0 && END_FLAG == 0) {
 			// notwritten = how much left to write ; totalsent = how much written so far ; num_sent = how much written in last write() call
-			num_sent = sendto(s_c_fd, s_c_buff_1 + totalsent, notwritten, 0, (SOCKADDR*) &cnl_addr, sizeof(cnl_addr));
+			num_sent = sendto(s_c_fd, s_c_buff_1 + totalsent, notwritten, 0, (SOCKADDR*)&cnl_addr, sizeof(cnl_addr));
 			if (num_sent == -1) {// check if error occured (server closed connection?)
 				fprintf(stderr, "%s\n", strerror(errno));
 				exit(1);
@@ -82,11 +86,10 @@ int main(int argc, char** argv) {
 			notwritten -= num_sent;
 		}
 	}
+	printf("received: %d bytes\nwritten: %d bytes\ndetected: %d errors, corrected: %d errors\n",
+		recv_buff[0], recv_buff[1], recv_buff[2], recv_buff[3]);
 
 	if (fclose(fp) != 0) {
-		fprintf(stderr, "%s\n", strerror(errno));
-	}
-	if (closesocket(s_c_fd) != 0) {
 		fprintf(stderr, "%s\n", strerror(errno));
 	}
 	return 0;
@@ -138,16 +141,16 @@ void compute_block(char read_buff[READ_BUFF], char s_c_buff_1[S_C_BUFF]) {
 			write_ind = (bit_ind / 7) + (block_ind * 8);
 			bit_pos = 7 - bit_ind % 7;
 
-			curr_bit = (read_buff[read_ind] & ((int) pow(2, bit_pos))) != 0; // 1 if result after mask is different from 0. otherwise - 0.
-			s_c_buff_1[write_ind] = (curr_bit <<  bit_pos) | s_c_buff_1[write_ind];
-			xor^= curr_bit;
+			curr_bit = (read_buff[read_ind] & ((int)pow(2, bit_pos))) != 0; // 1 if result after mask is different from 0. otherwise - 0.
+			s_c_buff_1[write_ind] = (curr_bit << bit_pos) | s_c_buff_1[write_ind];
+			xor ^= curr_bit;
 
 			printf("%d", curr_bit);		//print - delete after!!!!!!!!!!!!
 		}
 		printf("\n");//print - delete after!!!!!!!!!!!!
 
 		for (i = 0; i < 7; i++) {
-			s_c_buff_1[7+(block_ind * 8)] ^= s_c_buff_1[i];
+			s_c_buff_1[7 + (block_ind * 8)] ^= s_c_buff_1[i];
 		}
 		printf("\n------------\n");//print - delete after!!!!!!!!!!!!
 	}
@@ -172,7 +175,8 @@ void compute_block(char read_buff[READ_BUFF], char s_c_buff_1[S_C_BUFF]) {
 DWORD WINAPI thread_end_listen(void *param) {
 
 	int status, bytes_read, notread, totalread, num_sent;
-	int s_c_buff_1 = *((int*)param);
+	int recv_buff[] = ((struct ARGS*)param)->buff;
+	int s_c_fd = ((struct ARGS*)param)->socket_fd;
 
 	while (END_FLAG == 0) {
 		notread = RECEIVE_BUFF;
@@ -186,21 +190,12 @@ DWORD WINAPI thread_end_listen(void *param) {
 			totalread += bytes_read;
 			notread -= num_sent;
 		}
-		END_FLAG = 1;
-		_endthread(0);
-	}
-
-
-	while (1) {
-		memset(str, '\0', STR_LEN);
-		if (scanf("%s", str) > 0 && strcmp(str, "END") == 0) {
-			status = shutdown(connfd, SD_RECEIVE);
-			if (status) {
-				printf("Error while closing socket. \n");
-				_endthread(1);
-			}
-			END_FLAG = 1;
-			_endthread(0);
+		status = shutdown(s_c_fd, SD_BOTH);
+		if (status) {
+			printf("Error while closing socket. \n");
+			_endthread(1);
 		}
+		END_FLAG = 1;
 	}
+	_endthread(0);
 }
