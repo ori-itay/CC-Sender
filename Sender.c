@@ -65,14 +65,6 @@ int main(int argc, char** argv) {
 	cnl_addr.sin_addr.s_addr = inet_addr(ip);
 
 	HANDLE thread = CreateThread(NULL, 0, thread_end_listen, &s_c_fd, 0, NULL);
-
-	/* establish connection to the channel */
-	if(connect(s_c_fd, (struct sockaddr*) &cnl_addr, sizeof(cnl_addr)) < 0){
-		fprintf(stderr, "%s\n", strerror(errno));
-		return 1;
-	}
-	/* establish connection to the channel */
-
 	not_been_read = input_file_size;
 	while (not_been_read > 0 && END_FLAG == 0) {
 		num_to_write = read_from_file(fp, file_read_buff);; //curr num of bytes to write
