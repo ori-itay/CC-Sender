@@ -1,5 +1,5 @@
-
 #define _CRT_SECURE_NO_WARNINGS
+#define _WINSOCK_DEPRECATED_NO_WARNINGS
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -64,10 +64,15 @@ int main(int argc, char** argv) {
 	cnl_addr.sin_port = htons(chnl_port);
 	cnl_addr.sin_addr.s_addr = inet_addr(ip);
 
+	if (bind(s_c_fd, (SOCKADDR*) &cnl_addr, sizeof(cnl_addr)) < 0) {
+		fprintf(stderr, "%s\n", strerror(errno));
+		exit(1);
+	}
+
 	HANDLE thread = CreateThread(NULL, 0, thread_end_listen, &s_c_fd, 0, NULL);
 	not_been_read = input_file_size;
 	while (not_been_read > 0 && END_FLAG == 0) {
-		num_to_write = read_from_file(fp, file_read_buff);; //curr num of bytes to write
+		num_to_write = read_from_file(fp, file_read_buff); //curr num of bytes to write
 		not_been_read -= num_to_write;
 		compute_frame(file_read_buff, s_c_buff_1);
 		send_frame(s_c_buff_1, s_c_fd, cnl_addr, num_to_write);
@@ -76,6 +81,9 @@ int main(int argc, char** argv) {
 		recv_buff[0], recv_buff[1], recv_buff[2], recv_buff[3]);
 
 	if (fclose(fp) != 0) {
+		fprintf(stderr, "%s\n", strerror(errno));
+	}
+	if (shutdown(s_c_fd, SD_SEND) != 0) {
 		fprintf(stderr, "%s\n", strerror(errno));
 	}
 	return 0;
@@ -159,12 +167,12 @@ void compute_frame(char read_buff[READ_BUFF], char s_c_buff_1[S_C_BUFF]) {
 
 DWORD WINAPI thread_end_listen(void *param) {
 
-	int status, bytes_read, notread;
+	int status;
 	int s_c_fd = *(int*)(param);
 
 	while (END_FLAG == 0) {
-		receive_frame(recv_buff, s_c_fd, RECEIVE_BUFF * sizeof(int));
-		status = shutdown(s_c_fd, SD_BOTH);
+		receive_frame((char*)recv_buff, s_c_fd, RECEIVE_BUFF * sizeof(int));
+		status = shutdown(s_c_fd, SD_SEND);
 		if (status) {
 			printf("Error while closing socket. \n");
 			return 1;
