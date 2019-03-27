@@ -30,9 +30,9 @@ int main(int argc, char** argv) {
 
 	char udp_buff[UDP_BUFF], file_read_buff[READ_BUFF];
 	int recv_buff[UDP_BUFF];
-	int chnl_port = -1, not_been_read = -1, input_file_size = 0, s_c_fd = -1;
+	int local_port = -1, not_been_read = -1, input_file_size = 0, s_c_fd = -1;
 	FILE *fp;
-	struct sockaddr_in chnl_addr;
+	struct sockaddr_in sender_addr, chnl_addr;
 
 	if (argc != 4) {
 		fprintf(stderr, "Error: not enough arguments were provided\n");
@@ -47,19 +47,25 @@ int main(int argc, char** argv) {
 	input_file_size = get_file_size(fp);
 
 	//sender - channel socket
-	if ((s_c_fd = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
+	if ((s_c_fd = socket(AF_INET, SOCK_DGRAM, 0)) == INVALID_SOCKET) {
 		fprintf(stderr, "%s\n", strerror(errno));
 		exit(1);
 	}
+	//sender address
+	local_port = (unsigned int)strtoul(port, NULL, 10); 
+	memset(&sender_addr, 0, sizeof(sender_addr));
+	sender_addr.sin_family = AF_INET;
+	sender_addr.sin_port = htons(local_port);
+	sender_addr.sin_addr.s_addr = htonl(INADDR_ANY);
 	//channel address
-	chnl_port = (unsigned int)strtoul(port, NULL, 10); //get channel's port number
+	//chnl_port = (unsigned int)strtoul(port, NULL, 10); 
 	memset(&chnl_addr, 0, sizeof(chnl_addr));
 	chnl_addr.sin_family = AF_INET;
-	chnl_addr.sin_port = htons(chnl_port);
+	//chnl_addr.sin_port = htons(chnl_port);
 	chnl_addr.sin_addr.s_addr = inet_addr(chnl_ip);
 
-	if (bind(s_c_fd, (SOCKADDR*) &chnl_addr, sizeof(chnl_addr)) < 0) {
-		fprintf(stderr, "%s\n", strerror(errno));
+	if (bind(s_c_fd, (SOCKADDR*) &sender_addr, sizeof(sender_addr)) != 0) {
+		fprintf(stderr, "Bind failed. exiting...\n");
 		exit(1);
 	}
 
@@ -93,9 +99,10 @@ int main(int argc, char** argv) {
 void Init_Winsock() {
 	WSADATA wsaData;
 	int iResult = WSAStartup(MAKEWORD(2, 2), &wsaData);
-	if (iResult != NO_ERROR)
+	if (iResult != NO_ERROR) {
 		printf("Error at WSAStartup()\n");
-	exit(1);
+		exit(1);
+	}
 }
 
 
