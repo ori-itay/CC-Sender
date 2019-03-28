@@ -90,6 +90,7 @@ int main(int argc, char** argv) {
 	if (shutdown(s_c_fd, SD_SEND) != 0) {
 		fprintf(stderr, "%s\n", strerror(errno));
 	}
+	WSACleanup();
 	return 0;
 }
 
@@ -219,12 +220,12 @@ void receive_frame(char buff[], int fd, int bytes_to_read) {
 	int totalread = 0, bytes_been_read = 0;
 
 	totalread = 0;
-	while (bytes_to_read > 0) {
+	while (totalread < bytes_to_read) {
 		bytes_been_read = recvfrom(fd, (char*)buff + totalread, bytes_to_read, 0, 0, 0);
 		if (bytes_been_read == -1) {
 			fprintf(stderr, "%s\n", strerror(errno));
 			exit(1);
 		}
-		totalread -= bytes_been_read;
+		totalread += bytes_been_read;
 	}
 }
