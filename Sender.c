@@ -13,24 +13,28 @@
 
 #define UDP_BUFF 64
 #define READ_BUFF 49
+#define RECV_BUFF 4
 
+
+int recvfromTimeOutUDP(SOCKET socket, long sec, long usec);
 void Init_Winsock();
 int get_file_size(FILE *fp);
 int read_from_file(FILE *fp, char file_read_buff[]);
 void compute_frame(char read_buff[READ_BUFF], char s_c_buff_1[UDP_BUFF]);
 void send_frame(char buff[], int fd, struct sockaddr_in to_addr, int bytes_to_write);
-void receive_frame(char buff[], int fd, int bytes_to_read);
+int receive_frame(char buff[], int fd, int bytes_to_read);
 DWORD WINAPI thread_end_listen(void *param);
 
-int END_FLAG = 0;
+volatile int END_FLAG = 0;
+int SelectTiming;
 
 int main(int argc, char** argv) {
 
 	Init_Winsock();
 
 	char udp_buff[UDP_BUFF], file_read_buff[READ_BUFF];
-	int recv_buff[UDP_BUFF];
-	int local_port = -1, not_been_read = -1, input_file_size = 0, s_c_fd = -1;
+	int recv_buff[RECV_BUFF];
+	int local_port = -1, not_been_read = -1, input_file_size = 0, s_c_fd = -1, received_bytes = 0;
 	FILE *fp;
 	struct sockaddr_in sender_addr, chnl_addr;
 
@@ -52,16 +56,15 @@ int main(int argc, char** argv) {
 		exit(1);
 	}
 	//sender address
-	local_port = (unsigned int)strtoul(port, NULL, 10); 
 	memset(&sender_addr, 0, sizeof(sender_addr));
-	sender_addr.sin_family = AF_INET;
-	sender_addr.sin_port = htons(local_port);
+	sender_addr.sin_family = AF_INET; /* receiving */
+	sender_addr.sin_port = htons(0);
 	sender_addr.sin_addr.s_addr = htonl(INADDR_ANY);
 	//channel address
-	//chnl_port = (unsigned int)strtoul(port, NULL, 10); 
+	int chnl_port = (unsigned int)strtoul(port, NULL, 10); 
 	memset(&chnl_addr, 0, sizeof(chnl_addr));
-	chnl_addr.sin_family = AF_INET;
-	//chnl_addr.sin_port = htons(chnl_port);
+	chnl_addr.sin_family = AF_INET; /* sending to */
+	chnl_addr.sin_port = htons(chnl_port);
 	chnl_addr.sin_addr.s_addr = inet_addr(chnl_ip);
 
 	if (bind(s_c_fd, (SOCKADDR*) &sender_addr, sizeof(sender_addr)) != 0) {
@@ -69,18 +72,24 @@ int main(int argc, char** argv) {
 		exit(1);
 	}
 
-	HANDLE thread = CreateThread(NULL, 0, thread_end_listen, &s_c_fd, 0, NULL);
-
 	not_been_read = input_file_size;
-	while (not_been_read > 0 && END_FLAG == 0) {
+	while (not_been_read > 0 && received_bytes == 0) {
+		printf("before read from file \n");
 		read_from_file(fp, file_read_buff);
 		not_been_read -= READ_BUFF;
 		compute_frame(file_read_buff, udp_buff);
 		send_frame(udp_buff, s_c_fd, chnl_addr, UDP_BUFF);
+		printf("before receive frame\n");
+		if ((received_bytes = receive_frame((char*)recv_buff, s_c_fd, UDP_BUFF) )) { //receive stats from channel
+			break;
+		}
+		printf("after receive frame\n");
+	}
+	if (received_bytes == 0) {
+		SelectTiming = recvfromTimeOutUDP(s_c_fd, 100000, 0);
+		receive_frame((char*)recv_buff, s_c_fd, RECV_BUFF*sizeof(int)); //receive stats from channel
 	}
 
-	while (END_FLAG == 0) {}
-	receive_frame((char*)recv_buff, s_c_fd, UDP_BUFF); //receive stats from channel
 	printf("received: %d bytes\nwritten: %d bytes\ndetected: %d errors, corrected: %d errors\n",
 		recv_buff[0], recv_buff[1], recv_buff[2], recv_buff[3]);
 
@@ -124,7 +133,6 @@ void compute_frame(char read_buff[READ_BUFF], char udp_buff[UDP_BUFF]) {
 	char curr_bit;
 
 	memset(udp_buff, 0, UDP_BUFF);
-
 	for (block_ind = 0; block_ind < 8; block_ind++) {
 		printf("old block no # %d \n", block_ind); //print - delete after!!!!!!!!!!!!
 		for (bit_ind = 0; bit_ind < READ_BUFF; bit_ind++) {
@@ -206,6 +214,7 @@ void send_frame(char buff[], int fd, struct sockaddr_in to_addr, int bytes_to_wr
 
 	while (bytes_to_write > 0 && END_FLAG == 0) {
 		num_sent = sendto(fd, buff + totalsent, bytes_to_write, 0, (SOCKADDR*)&to_addr, sizeof(to_addr));
+		printf("num sent: %d\n", num_sent);
 		if (num_sent == -1) {
 			fprintf(stderr, "%s\n", strerror(errno));
 			exit(1);
@@ -213,19 +222,61 @@ void send_frame(char buff[], int fd, struct sockaddr_in to_addr, int bytes_to_wr
 		totalsent += num_sent;
 		bytes_to_write -= num_sent;
 	}
+	//sprintf("wrote %d bytes \n", totalsent);
 }
 
 
-void receive_frame(char buff[], int fd, int bytes_to_read) {
-	int totalread = 0, bytes_been_read = 0;
+int receive_frame(char buff[], int fd, int bytes_to_read) {
+	int totalread = 0, bytes_been_read = 0, data_len;
 
 	totalread = 0;
 	while (totalread < bytes_to_read) {
-		bytes_been_read = recvfrom(fd, (char*)buff + totalread, bytes_to_read, 0, 0, 0);
+		printf("in receive frame before recvfrom\n");
+		//addrsize = sizeof(from_addr);
+		//bytes_been_read = recvfrom(fd, buff + totalread, bytes_to_read, 0,  &from_addr, &addrsize);
+		ioctlsocket(fd, FIONREAD, &data_len);
+		if (data_len == 0) { break; }
+		bytes_been_read = recvfrom(fd, buff + totalread, bytes_to_read, 0, 0, 0);
+		printf("in receive frame after recvfrom. bytes_been_read: %d\n", bytes_been_read);
 		if (bytes_been_read == -1) {
 			fprintf(stderr, "%s\n", strerror(errno));
 			exit(1);
 		}
 		totalread += bytes_been_read;
 	}
+	return totalread;
+}
+
+
+int recvfromTimeOutUDP(SOCKET socket, long sec, long usec)
+{
+
+	// Setup timeval variable
+
+	struct timeval timeout;
+
+	struct fd_set fds;
+
+
+
+	timeout.tv_sec = sec;
+
+	timeout.tv_usec = usec;
+
+	// Setup fd_set structure
+
+	FD_ZERO(&fds);
+
+	FD_SET(socket, &fds);
+
+	// Return value:
+
+	// -1: error occurred
+
+	// 0: timed out
+
+	// > 0: data ready to be read
+
+	return select(0, &fds, 0, 0, &timeout);
+
 }
