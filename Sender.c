@@ -72,7 +72,6 @@ int main(int argc, char** argv) {
 	}
 
 	while (read_from_file(fp, file_read_buff) && received_bytes == 0 && END_FLAG == 0) {
-
 		compute_frame(file_read_buff, udp_buff);
 		send_frame(udp_buff, s_c_fd, chnl_addr, UDP_BUFF);
 		if ((received_bytes = receive_frame((char*)recv_buff, s_c_fd, UDP_BUFF) )) { //receive stats from channel
