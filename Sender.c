@@ -86,7 +86,7 @@ int main(int argc, char** argv) {
 		SelectTiming = recvfromTimeOutUDP(s_c_fd, 100000, 0);
 		receive_frame((char*)recv_buff, s_c_fd, RECV_BUFF*sizeof(int)); //receive stats from channel
 	}
-
+	printf("input file size: %d bytes. not beet read: %d\n", input_file_size, not_been_read);
 	printf("received: %d bytes\nwritten: %d bytes\ndetected: %d errors, corrected: %d errors\n",
 		recv_buff[0], recv_buff[1], recv_buff[2], recv_buff[3]);
 
@@ -126,50 +126,53 @@ int get_file_size(FILE *fp) {
 
 void compute_frame(char read_buff[READ_BUFF], char udp_buff[UDP_BUFF]) {
 
-	int bit_ind, read_ind, write_ind, block_ind, xor = 0, bit_pos, i, j;
+	int bit_ind, read_ind, write_ind, block_ind, xor = 0, r_bit_pos = 7, w_bit_pos = 7, i, j;
 	char curr_bit;
 
 	memset(udp_buff, 0, UDP_BUFF);
 	for (block_ind = 0; block_ind < 8; block_ind++) {
-		printf("old block no # %d \n", block_ind); //print - delete after!!!!!!!!!!!!
+		//printf("old block no # %d \n", block_ind); //print - delete after!!!!!!!!!!!!
 		for (bit_ind = 0; bit_ind < READ_BUFF; bit_ind++) {
 
-			if (bit_ind % 7 == 0 && bit_ind != 0) { printf("\n"); }//print - delete after!!!!!!!!!!!!
+			//if (bit_ind % 7 == 0 && bit_ind != 0) { printf("\n"); }//print - delete after!!!!!!!!!!!!
 
 			read_ind = (bit_ind + (block_ind * 49)) / 8;
 			write_ind = bit_ind/7 + block_ind * 8;
-			bit_pos = 7 - bit_ind % 7;
 
-			curr_bit =  (read_buff[read_ind] & (int) pow(2, bit_pos)) != 0; // 1 if result after mask is different from 0. otherwise - 0.
-			udp_buff[write_ind] = (curr_bit << bit_pos) | udp_buff[write_ind];
+			curr_bit =  (read_buff[read_ind] & (int) pow(2, r_bit_pos)) != 0; // 1 if result after mask is different from 0. otherwise - 0.
+			udp_buff[write_ind] = (curr_bit << w_bit_pos) | udp_buff[write_ind];
 			xor ^= curr_bit;
 
-			printf("%d", curr_bit);		//print - delete after!!!!!!!!!!!!
+			//printf("%d", curr_bit);		//print - delete after!!!!!!!!!!!!
 
 			if (((bit_ind+1) % 7) == 0 && bit_ind != 0) {
 				//store parity
 				udp_buff[write_ind] = xor | udp_buff[write_ind];
 				xor = 0;
 			}
+			r_bit_pos--;
+			if (r_bit_pos == -1) { r_bit_pos = 7; }
+			w_bit_pos--;
+			if (w_bit_pos == 0) { w_bit_pos = 7; }
 		}
-		printf("\n");//print - delete after!!!!!!!!!!!!
+		//printf("\n");//print - delete after!!!!!!!!!!!!
 
 		for (i = 0; i < 7; i++) {
 			udp_buff[block_ind*8 + 7] ^= udp_buff[i+(block_ind * 8)];
 		}
-		printf("\n------------\n");//print - delete after!!!!!!!!!!!!
+		//printf("\n------------\n");//print - delete after!!!!!!!!!!!!
 	}
 
-	printf("\nNew blocks: \n");//print - delete after!!!!!!!!!!!!
+	//printf("\nNew blocks: \n");//print - delete after!!!!!!!!!!!!
 	for (i = 0; i < 64; i++) {//print - delete after!!!!!!!!!!!!
 		if (i % 8 == 0) {//print - delete after!!!!!!!!!!!!
-			printf("new block no # %d \n", i / 8);//print - delete after!!!!!!!!!!!!
+			//printf("new block no # %d \n", i / 8);//print - delete after!!!!!!!!!!!!
 		}
 
 		for (j = 0; j < 8; j++) {//print - delete after!!!!!!!!!!!!
-			printf("%d", !!((udp_buff[i] << j) & 0x80));//print - delete after!!!!!!!!!!!!
+			//printf("%d", !!((udp_buff[i] << j) & 0x80));//print - delete after!!!!!!!!!!!!
 		}//print - delete after!!!!!!!!!!!!
-		printf("\n");//print - delete after!!!!!!!!!!!!
+		//printf("\n");//print - delete after!!!!!!!!!!!!
 	}
 
 	return;
