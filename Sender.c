@@ -83,7 +83,7 @@ int main(int argc, char** argv) {
 		SelectTiming = recvfromTimeOutUDP(s_c_fd, 100000, 0);
 		receive_frame((char*)recv_buff, s_c_fd, RECV_BUFF*sizeof(int)); //receive stats from channel
 	}
-	printf("received: %d bytes\nwritten: %d bytes\ndetected: %d errors, corrected: %d errors",
+	fprintf(stderr,"received: %d bytes\nwritten: %d bytes\ndetected: %d errors, corrected: %d errors",
 		recv_buff[0], recv_buff[1], recv_buff[2], recv_buff[3]);
 
 	if (fclose(fp) != 0) {
