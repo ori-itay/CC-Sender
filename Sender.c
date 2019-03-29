@@ -13,7 +13,7 @@
 
 #define UDP_BUFF 64
 #define READ_BUFF 49
-#define RECV_BUFF 4
+#define RECV_BUFF 16
 
 
 int recvfromTimeOutUDP(SOCKET socket, long sec, long usec);
@@ -73,17 +73,14 @@ int main(int argc, char** argv) {
 	}
 
 	not_been_read = input_file_size;
-	while (not_been_read > 0 && received_bytes == 0) {
-		printf("before read from file \n");
+	while (not_been_read > 0 && received_bytes == 0 && END_FLAG == 0) {
 		read_from_file(fp, file_read_buff);
 		not_been_read -= READ_BUFF;
 		compute_frame(file_read_buff, udp_buff);
 		send_frame(udp_buff, s_c_fd, chnl_addr, UDP_BUFF);
-		printf("before receive frame\n");
 		if ((received_bytes = receive_frame((char*)recv_buff, s_c_fd, UDP_BUFF) )) { //receive stats from channel
 			break;
 		}
-		printf("after receive frame\n");
 	}
 	if (received_bytes == 0) {
 		SelectTiming = recvfromTimeOutUDP(s_c_fd, 100000, 0);
@@ -139,33 +136,33 @@ void compute_frame(char read_buff[READ_BUFF], char udp_buff[UDP_BUFF]) {
 
 			if (bit_ind % 7 == 0 && bit_ind != 0) { printf("\n"); }//print - delete after!!!!!!!!!!!!
 
-			if ((bit_ind % 7) == 0 && bit_ind != 0) {
-				//store parity
-				udp_buff[write_ind] = xor | udp_buff[write_ind];
-				xor = 0;
-			}
-
-			read_ind = (bit_ind / 8) + (block_ind * 8);
-			write_ind = (bit_ind / 7) + (block_ind * 8);
+			read_ind = (bit_ind + (block_ind * 49)) / 8;
+			write_ind = bit_ind/7 + block_ind * 8;
 			bit_pos = 7 - bit_ind % 7;
 
-			curr_bit = (read_buff[read_ind] & ((int)pow(2, bit_pos))) != 0; // 1 if result after mask is different from 0. otherwise - 0.
+			curr_bit =  (read_buff[read_ind] & (int) pow(2, bit_pos)) != 0; // 1 if result after mask is different from 0. otherwise - 0.
 			udp_buff[write_ind] = (curr_bit << bit_pos) | udp_buff[write_ind];
 			xor ^= curr_bit;
 
 			printf("%d", curr_bit);		//print - delete after!!!!!!!!!!!!
+
+			if (((bit_ind+1) % 7) == 0 && bit_ind != 0) {
+				//store parity
+				udp_buff[write_ind] = xor | udp_buff[write_ind];
+				xor = 0;
+			}
 		}
 		printf("\n");//print - delete after!!!!!!!!!!!!
 
 		for (i = 0; i < 7; i++) {
-			udp_buff[7 + (block_ind * 8)] ^= udp_buff[i];
+			udp_buff[block_ind*8 + 7] ^= udp_buff[i+(block_ind * 8)];
 		}
 		printf("\n------------\n");//print - delete after!!!!!!!!!!!!
 	}
 
 	printf("\nNew blocks: \n");//print - delete after!!!!!!!!!!!!
 	for (i = 0; i < 64; i++) {//print - delete after!!!!!!!!!!!!
-		if (i % 8 == 0 && i != 63) {//print - delete after!!!!!!!!!!!!
+		if (i % 8 == 0) {//print - delete after!!!!!!!!!!!!
 			printf("new block no # %d \n", i / 8);//print - delete after!!!!!!!!!!!!
 		}
 
@@ -214,7 +211,6 @@ void send_frame(char buff[], int fd, struct sockaddr_in to_addr, int bytes_to_wr
 
 	while (bytes_to_write > 0 && END_FLAG == 0) {
 		num_sent = sendto(fd, buff + totalsent, bytes_to_write, 0, (SOCKADDR*)&to_addr, sizeof(to_addr));
-		printf("num sent: %d\n", num_sent);
 		if (num_sent == -1) {
 			fprintf(stderr, "%s\n", strerror(errno));
 			exit(1);
@@ -227,22 +223,20 @@ void send_frame(char buff[], int fd, struct sockaddr_in to_addr, int bytes_to_wr
 
 
 int receive_frame(char buff[], int fd, int bytes_to_read) {
-	int totalread = 0, bytes_been_read = 0, data_len;
+	int totalread = 0, bytes_been_read = 0;
+	unsigned long data_len;
 
 	totalread = 0;
 	while (totalread < bytes_to_read) {
-		printf("in receive frame before recvfrom\n");
-		//addrsize = sizeof(from_addr);
-		//bytes_been_read = recvfrom(fd, buff + totalread, bytes_to_read, 0,  &from_addr, &addrsize);
 		ioctlsocket(fd, FIONREAD, &data_len);
-		if (data_len == 0) { break; }
+		if (data_len <= 0) { break; }
 		bytes_been_read = recvfrom(fd, buff + totalread, bytes_to_read, 0, 0, 0);
-		printf("in receive frame after recvfrom. bytes_been_read: %d\n", bytes_been_read);
 		if (bytes_been_read == -1) {
 			fprintf(stderr, "%s\n", strerror(errno));
 			exit(1);
 		}
 		totalread += bytes_been_read;
+		END_FLAG = 1;
 	}
 	return totalread;
 }
