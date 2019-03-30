@@ -16,9 +16,8 @@
 #define READ_BUFF 49
 #define RECV_BUFF 16
 
-int recvfromTimeOutUDP(SOCKET socket, long sec, long usec);
+int recvfromTimeOutUDP(SOCKET socket);
 void Init_Winsock();
-int get_file_size(FILE *fp);
 int read_from_file(FILE *fp, char file_read_buff[]);
 void compute_frame(char read_buff[READ_BUFF], char s_c_buff_1[UDP_BUFF]);
 void send_frame(char buff[], int fd, struct sockaddr_in to_addr, int bytes_to_write);
@@ -79,7 +78,7 @@ int main(int argc, char** argv) {
 		}
 	}
 	if (received_bytes == 0) { //still haven't got "end" from channel-receiver
-		SelectTiming = recvfromTimeOutUDP(s_c_fd, 100000, 0);
+		SelectTiming = recvfromTimeOutUDP(s_c_fd);
 		receive_frame((char*)recv_buff, s_c_fd, RECV_BUFF*sizeof(int)); //receive stats from channel
 	}
 	fprintf(stderr,"received: %d bytes\nwritten: %d bytes\ndetected: %d errors, corrected: %d errors",
@@ -207,26 +206,11 @@ int receive_frame(char buff[], int fd, int bytes_to_read) {
 }
 
 
-int recvfromTimeOutUDP(SOCKET socket, long sec, long usec)
+int recvfromTimeOutUDP(SOCKET socket)
 {
-
-	// Setup timeval variable
-
-	struct timeval timeout;
-
 	struct fd_set fds;
-
-
-	timeout.tv_sec = sec;
-
-	timeout.tv_usec = usec;
-
 	// Setup fd_set structure
-
 	FD_ZERO(&fds);
-
 	FD_SET(socket, &fds);
-
-	return select(0, &fds, 0, 0, &timeout);
-
+	return select(socket + 1, &fds, NULL, NULL, NULL);
 }
